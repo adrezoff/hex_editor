@@ -1,0 +1,16 @@
+{
+    "title": "Hex Editor",
+    "file": "Файл",
+    "open": "Открыть",
+    "save": "Сохранить",
+    "action": "Действие",
+    "action.undo": "Отменить",
+    "action.redo": "Повторить",
+    "window": "Окно",
+    "language": "Язык",
+    "offset": "Смещение",
+    "confirm_exit_title": "Подтверждение выхода",
+    "confirm_exit_message": "Вы уверены, что хотите выйти?",
+    "yes": "Да",
+    "no": "Нет"
+}
