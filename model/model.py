@@ -1,34 +1,55 @@
 import sys
 import os
+from typing import Dict, List
 
-from model.hex_logging import Logger, LogRecord
+from model.logging import Logger, LogRecord
+
 
 class Buffer:
-    def __init__(self, file_name):
-        self.row_count = 30
-        self.chunk_size = 4194304
-        self.encoding = sys.getdefaultencoding()
-        self._16_base = ['0', '1', '2', '3', '4', '5', '6', '7',
-                         '8', '9', 'a', 'b', 'c', 'd', 'e', 'f']
-        # Запоминание данных
-        self.file_name = file_name
-        self.file = open(file_name, 'br')
-        self.file_size = os.path.getsize(file_name)
-        self.extended_bytes = {}
-        self.logger = Logger(self.extended_bytes)
-        self.update_data(0)
-        self.cursors = []
-        self.cursor_is_busy = False
+    """
+    Класс для работы с данными в чанковом формате.
 
-    # Размер файла
-    def get_size(self):
-        res = self.file_size
-        for bytes in self.extended_bytes.values():
-            res += len(bytes) - 1
+    :param file_name: Имя файла для работы с буфером.
+    :type file_name: str
+    """
+
+    def __init__(self, file_name: str) -> None:
+        self.row_count: int = 30
+        self.chunk_size: int = 4194304
+        self.len_byte = 3
+        self.len_ascii_char = 16
+        self.len_ascii_line = 17
+        self.encoding: str = sys.getdefaultencoding()
+        self._16_base: List[str] = ['0', '1', '2', '3', '4', '5', '6', '7',
+                                    '8', '9', 'a', 'b', 'c', 'd', 'e', 'f']
+        self.file_name: str = file_name
+        self.file = open(file_name, 'br')
+        self.file_size: int = os.path.getsize(file_name)
+        self.extended_bytes: Dict[int, bytearray] = {}
+        self.logger: Logger = Logger(self.extended_bytes)
+        self.update_data(0)
+        self.cursors: List[int] = []
+        self.cursor_is_busy: bool = False
+
+    def get_size(self) -> int:
+        """
+        Получает размер буфера, включая расширенные данные.
+
+        :return: Размер буфера в байтах.
+        :rtype: int
+        """
+        res: int = self.file_size
+        for bytes_ in self.extended_bytes.values():
+            res += len(bytes_) - 1
         return res
 
-    # Запись данных в файл
-    def write_data(self, file):
+    def write_data(self, file) -> None:
+        """
+        Записывает данные буфера в файл.
+
+        :param file: Файл для записи данных.
+        :type file: file
+        """
         self.file.seek(0)
         current_pos = 0
         extended_positions = sorted(self.extended_bytes.keys())
@@ -46,16 +67,20 @@ class Buffer:
         remaining_data = self.file.read()
         file.write(remaining_data)
 
-    # Обновление сдвига
-    def update_data(self, shift):
+    def update_data(self, shift: int) -> None:
+        """
+        Обновляет данные в соответствии с заданным сдвигом.
+
+        :param shift: Сдвиг.
+        :type shift: int
+        """
         self.tens_offset = shift
 
-        start = shift * 16
+        start = shift * self.len_ascii_char
         iter = 0
         self.shown = bytearray()
         self.byte_index = {}
 
-        # Пробизаемся по изменённым байтам и смотрим насколько нужно сдвигаться
         for i in sorted(self.extended_bytes.keys()):
             if i < start:
                 if i + len(self.extended_bytes[i]) < start:
@@ -79,13 +104,11 @@ class Buffer:
             else:
                 break
 
-        # Обработка крайнего случая
         self.file.seek(start)
         if self.file.tell() != 0:
             self.byte_index[-1] = self.file.tell() - 1
 
-        # Заполняем показываемые байты
-        while len(self.shown) < self.row_count * 16:
+        while len(self.shown) < self.row_count * self.len_ascii_char:
             pos = self.file.tell()
             byte = self.file.read(1)
             if byte == b'':
@@ -100,8 +123,17 @@ class Buffer:
                 iter += 1
                 self.shown.append(byte[0])
 
-    # Возвращает позицию байта в данных
-    def get_position(self, index, shift):
+    def get_position(self, index: int, shift: int) -> int:
+        """
+        Возвращает позицию байта в данных.
+
+        :param index: Индекс байта.
+        :type index: int
+        :param shift: Сдвиг.
+        :type shift: int
+        :return: Позиция байта.
+        :rtype: int
+        """
         pos = 0
         for i in range(index):
             if i in self.extended_bytes:
@@ -113,12 +145,24 @@ class Buffer:
             pos += 1
         return pos
 
-    # Обновление данных относительно позиции из hex поля
-    def update_from_hex_position(self, position, char, is_insert):
+    def update_from_hex_position(self, position: int,
+                                 char: str, is_insert: bool) -> int:
+        """
+        Обновляет данные относительно позиции в шестнадцатеричном формате.
+
+        :param position: Позиция в шестнадцатеричном формате.
+        :type position: int
+        :param char: Символ для обновления.
+        :type char: str
+        :param is_insert: Флаг вставки.
+        :type is_insert: bool
+        :return: Новая позиция.
+        :rtype: int
+        """
         if char in self._16_base:
-            index = position // 3
-            if position % 3 == 0:
-                if position != len(self.shown) * 3 and is_insert:
+            index = position // self.len_byte
+            if position % self.len_byte == 0:
+                if position != len(self.shown) * self.len_byte and is_insert:
                     new = char
                     new += self.shown[index:index + 1].hex()[1:]
                     self.add_byte(index, bytes.fromhex(new), True)
@@ -133,75 +177,102 @@ class Buffer:
             position = self.handle_multicursor(position, char, is_insert)
         return position
 
-    # Добавляет байт в данные на основе его положения в bytes_field
-    def add_byte(self, index, byte, is_insert):
+    def add_byte(self, index: int, byte: bytes, is_insert: bool) -> None:
+        """
+        Добавляет байт в данные на основе его положения.
+
+        :param index: Индекс байта.
+        :type index: int
+        :param byte: Добавляемый байт.
+        :type byte: bytes
+        :param is_insert: Флаг вставки.
+        :type is_insert: bool
+        """
         if not is_insert:
             index -= 1
         try:
             if self.byte_index[index] in self.extended_bytes:
                 shift = 0
                 try:
-                    while self.byte_index[index - shift - 1] ==\
-                            self.byte_index[index]:
+                    while (self.byte_index[index - shift - 1]
+                           == self.byte_index[index]):
                         shift += 1
                 except KeyError:
                     pass
                 log = LogRecord(self.byte_index[index],
-                                            self.extended_bytes[
-                                                self.byte_index[index]],
-                                            byte, shift, is_insert)
+                                self.extended_bytes[self.byte_index[index]],
+                                byte, shift,
+                                is_insert)
                 if is_insert:
-                    self.extended_bytes[self.byte_index[index]][shift] =\
-                        byte[0]
+                    self.extended_bytes[self.byte_index[index]][shift] \
+                        = byte[0]
                 else:
-                    self.extended_bytes[self.byte_index[index]].insert(
-                        shift + 1, byte[0])
+                    (self.extended_bytes[self.byte_index[index]].
+                     insert(shift + 1, byte[0]))
             else:
                 new = bytearray()
                 if is_insert:
                     log = LogRecord(self.byte_index[index],
-                                                None, byte, 0, is_insert)
+                                    None, byte, 0, is_insert)
                 elif index != -1:
                     new = bytearray(self.shown[index: index + 1])
                     log = LogRecord(self.byte_index[index],
-                                                None, byte, 1, is_insert)
+                                    None, byte, 1, is_insert)
                 else:
                     self.file.seek(self.byte_index[index])
                     new = bytearray(self.file.read(1))
                     log = LogRecord(self.byte_index[index],
-                                                None, byte, 1, is_insert)
+                                    None, byte, 1, is_insert)
                 new.append(byte[0])
                 self.extended_bytes[self.byte_index[index]] = new
         except KeyError:
             if 0 not in self.extended_bytes:
                 self.extended_bytes[0] = self.shown[0:1]
-            log = LogRecord(0, self.extended_bytes[0],
-                                        byte, 1, is_insert)
+            log = LogRecord(0, self.extended_bytes[0], byte,
+                            1, is_insert)
             self.extended_bytes[0].insert(0, byte[0])
         self.logger.add(log)
 
-    # Обновлении позиции относительно текстовых данных
-    def update_from_text_position(self, position, char, is_insert):
+    def update_from_text_position(self, position: int,
+                                  char: str, is_insert: bool) -> int:
+        """
+        Обновляет данные относительно позиции в текстовом формате.
+
+        :param position: Позиция в текстовом формате.
+        :type position: int
+        :param char: Символ для обновления.
+        :type char: str
+        :param is_insert: Флаг вставки.
+        :type is_insert: bool
+        :return: Новая позиция.
+        :rtype: int
+        """
         if char.isalnum():
-            index = position - (position // 17)
-            if position != len(self.shown) + (position // 17) and is_insert:
+            index = position - (position // self.len_ascii_line)
+            if (position != len(self.shown) +
+                    (position // self.len_ascii_line) and is_insert):
                 self.add_byte(index, char.encode(self.encoding), True)
             else:
                 self.add_byte(index, char.encode(self.encoding), False)
-            if position % 17 == 15:
+            if position % self.len_ascii_line == 15:
                 position += 1
             if index == len(self.shown):
                 position += 1
             position += 1
         return position
 
-    # Удаление байта из данных
-    def delete_byte(self, index):
+    def delete_byte(self, index: int) -> None:
+        """
+        Удаляет байт из данных.
+
+        :param index: Индекс байта.
+        :type index: int
+        """
         if self.byte_index[index] in self.extended_bytes:
             shift = 0
             try:
-                while self.byte_index[index - 1 - shift] == \
-                        self.byte_index[index]:
+                while (self.byte_index[index - 1 - shift]
+                       == self.byte_index[index]):
                     shift += 1
             except KeyError:
                 pass
@@ -213,111 +284,177 @@ class Buffer:
             except IndexError:
                 pass
         else:
-            log = LogRecord(self.byte_index[index],
-                            None, b'', 0, True)
+            log = LogRecord(self.byte_index[index], None,
+                            b'', 0, True)
             self.extended_bytes[self.byte_index[index]] = bytearray()
         self.logger.add(log)
 
-    # Стирание данных относительно hex позиции
-    def backspace_event_from_text(self, position):
-        index = position - (position // 17) - 1
+    def backspace_event_from_text(self, position: int) -> int:
+        """
+        Выполняет действие "backspace" относительно позиции в
+        текстовом формате.
+
+        :param position: Позиция в текстовом формате.
+        :type position: int
+        :return: Новая позиция.
+        :rtype: int
+        """
+        index = position - (position // self.len_ascii_line) - 1
         self.delete_byte(index)
 
         position -= 1
-        if position % 17 == 16:
+        if position % self.len_ascii_line == self.len_ascii_char:
             position -= 1
         return position
 
-    # Стирание данных относительно текстовой позиции
-    def backspace_event_from_hex(self, position):
-        if position % 3 == 0 and position != 0:
-            index = position // 3 - 1
+    def backspace_event_from_hex(self, position: int) -> int:
+        """
+        Выполняет действие "backspace" относительно позиции в
+        шестнадцатеричном формате.
+
+        :param position: Позиция в шестнадцатеричном формате.
+        :type position: int
+        :return: Новая позиция.
+        :rtype: int
+        """
+        if position % self.len_byte == 0 and position != 0:
+            index = position // self.len_byte - 1
             self.delete_byte(index)
-            position -= 3
-            position = self.handle_multicursor(position, '', True)
+            position -= self.len_byte
+            position = self.handle_multicursor(position, '',
+                                               True)
         else:
-            position = self.handle_multicursor(position, '', False)
+            position = self.handle_multicursor(position, '',
+                                               False)
 
         return position
 
-    # Показ десятков
-    def tens_count(self):
-        end = self.tens_offset + len(self.shown) // 16 + 1
+    def tens_count(self) -> str:
+        """
+        Возвращает строку с десятками в шестнадцатеричном формате.
 
-        return ''.join([str(hex(x))[2:].zfill(7) + '0\n'
-                        for x in range(self.tens_offset, end)])
+        :return: Строка с десятками.
+        :rtype: str
+        """
+        end = self.tens_offset + len(self.shown) // self.len_ascii_char + 1
+        return ''.join([str(hex(x))[2:].zfill(7) +
+                        '0\n' for x in range(self.tens_offset, end)])
 
-    # Показ строки с единицами
-    def units_count(self):
+    def units_count(self) -> str:
+        """
+        Возвращает строку с единицами в шестнадцатеричном формате.
+
+        :return: Строка с единицами.
+        :rtype: str
+        """
         return ' '.join([f'0{digit}' for digit in self._16_base])
 
-    # Возврат данных в hex виде
-    def to_hex(self):
+    def to_hex(self) -> str:
+        """
+        Возвращает данные в шестнадцатеричном формате.
+
+        :return: Данные в шестнадцатеричном формате.
+        :rtype: str
+        """
         _hex = self.shown.hex()
         hex_list = [_hex[i:i + 2] for i in range(0, len(_hex), 2)]
 
-        if len(hex_list) % 16 != 0:
-            for i in range(0, 16 - len(hex_list) % 16):
+        if len(hex_list) % self.len_ascii_char != 0:
+            for i in range(0, self.len_ascii_char -
+                              len(hex_list) % self.len_ascii_char):
                 hex_list.append('')
 
-        return ('\n'.join([' '.join([hex_list[j] for j in range(i, i + 16)])
-                          for i in range(0, len(hex_list), 16)]).rstrip()
-                + ' ')
+        return ('\n'.join(
+            [' '.join([hex_list[j] for j in
+                       range(i, i + self.len_ascii_char)])
+             for i in range(0, len(hex_list),
+                            self.len_ascii_char)]).rstrip() + ' ')
 
-    # Возврат данных в текстовом виде
-    def to_text(self):
-        text = ''.join([self.char_decrypt(i) for i in range(len(self.shown))])
+    def to_text(self) -> str:
+        """
+        Возвращает данные в текстовом формате.
 
-        res = '\n'.join([text[i:i + 16] for i in range(
-            0, len(text) - len(text) % 16, 16)])
+        :return: Данные в текстовом формате.
+        :rtype: str
+        """
+        text = ''.join([self.char_decrypt(i)
+                        for i in range(len(self.shown))])
 
-        return (res + f'\n{text[len(text) - len(text) % 16:]}').lstrip('\n')
+        res = '\n'.join([text[i:i + self.len_ascii_char] for i
+                         in range(0, len(text) - len(text)
+                                  % self.len_ascii_char,
+                                  self.len_ascii_char)])
 
-    # Перевод байтов в символы
-    def char_decrypt(self, index):
+        return (res + f'\n{text[len(text) - len(text) 
+                                % self.len_ascii_char:]}').lstrip('\n')
+
+    def char_decrypt(self, index: int) -> str:
+        """
+        Переводит байты в символы.
+
+        :param index: Индекс байта.
+        :type index: int
+        :return: Символ.
+        :rtype: str
+        """
         res = ''
         if self.shown[index] != '':
             if self.shown[index] < 20:
                 res += '.'
             else:
                 try:
-                    res += self.shown[index:index+1].decode(self.encoding)
+                    res += self.shown[index:index + 1].decode(self.encoding)
                 except UnicodeDecodeError:
                     res += '.'
         return res
 
-    # Управление другими курсорами
-    def handle_multicursor(self, position, char, is_insert_or_is_deleted):
+    def handle_multicursor(self, position: int,
+                           char: str, is_insert_or_is_deleted: bool) -> int:
+        """
+        Управляет несколькими курсорами.
+
+        :param position: Текущая позиция.
+        :type position: int
+        :param char: Символ для обновления.
+        :type char: str
+        :param is_insert_or_is_deleted: Флаг вставки или удаления.
+        :type is_insert_or_is_deleted: bool
+        :return: Новая позиция.
+        :rtype: int
+        """
         if not self.cursor_is_busy:
             self.cursor_is_busy = True
             self.cursors = list(set(self.cursors))
             self.cursors.sort()
             if char == '':
-                if position % 3 == 0 and is_insert_or_is_deleted:
+                if position % self.len_byte == 0 and is_insert_or_is_deleted:
                     for i in range(len(self.cursors)):
-                        if self.cursors[i] > position + 3:
-                            self.cursors[i] -= 3
+                        if self.cursors[i] > position + self.len_byte:
+                            self.cursors[i] -= self.len_byte
                 for i in range(len(self.cursors) - 1, -1, -1):
-                    if self.cursors[i] % 3 == 0:
-                        if position + 3 > self.cursors[i] != 0 \
-                                and self.cursors != 0:
-                            position -= 3
-                        self.cursors[i] = self.backspace_event_from_hex(
-                            self.cursors[i])
+                    if self.cursors[i] % self.len_byte == 0:
+                        if (position + self.len_byte > self.cursors[i] != 0
+                                and self.cursors != 0):
+                            position -= self.len_byte
+                        self.cursors[i] = (
+                            self.backspace_event_from_hex(self.cursors[i]))
             else:
-                if not is_insert_or_is_deleted and (position - 1) % 3 == 0:
+                if (not is_insert_or_is_deleted
+                        and (position - 1) % self.len_byte == 0):
                     for i in range(len(self.cursors)):
-                        if self.cursors[i] > position - 3:
-                            self.cursors[i] += 3
+                        if self.cursors[i] > position - self.len_byte:
+                            self.cursors[i] += self.len_byte
                 offset = 0
                 for i in range(len(self.cursors)):
-                    self.cursors[i] = offset\
-                        + self.update_from_hex_position(
-                        self.cursors[i], char, is_insert_or_is_deleted)
-                    if not is_insert_or_is_deleted \
-                            and (self.cursors[i] - 1) % 3 == 0:
-                        offset += 3
-                        if self.cursors[i] < position - 3:
-                            position += 3
+                    self.cursors[i] = (offset +
+                                       self.update_from_hex_position(
+                                           self.cursors[i],
+                                           char,
+                                           is_insert_or_is_deleted))
+                    if (not is_insert_or_is_deleted and (self.cursors[i] - 1)
+                            % self.len_byte == 0):
+                        offset += self.len_byte
+                        if self.cursors[i] < position - self.len_byte:
+                            position += self.len_byte
             self.cursor_is_busy = False
         return position

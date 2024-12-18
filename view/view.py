@@ -1,24 +1,37 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
-from PyQt5.QtWidgets import QMessageBox, QDialog
+from PyQt5.QtWidgets import QDialog
 
-from model.cursor_manager import cursor_correcting_for_hex
+from controller.cursor_manager import cursor_correcting_for_hex
 from view.localization import Localization
-from utils import CustomDialog
+from view.utils import CustomDialog
 
 
 class UiMainWindow(QtWidgets.QMainWindow):
+    """
+    Пользовательский интерфейс главного окна.
+
+    """
+
     hex_field_key_pres = QtCore.pyqtSignal(QtGui.QTextCursor, str)
     text_field_key_pres = QtCore.pyqtSignal(QtGui.QTextCursor, str)
     hex_field_backspace = QtCore.pyqtSignal(QtGui.QTextCursor)
     text_field_backspace = QtCore.pyqtSignal(QtGui.QTextCursor)
 
-    def __init__(self):
+    def __init__(self) -> None:
+        """
+        Конструктор класса UiMainWindow.
+
+        """
         super().__init__()
         self.resize(640, 480)
         self.setup_ui()
         self.show()
 
-    def setup_ui(self):
+    def setup_ui(self) -> None:
+        """
+        Настройка пользовательского интерфейса.
+
+        """
         thickening = 40
         font = QtGui.QFont("PT Mono", 12)
         font_metrics = QtGui.QFontMetrics(font)
@@ -30,12 +43,15 @@ class UiMainWindow(QtWidgets.QMainWindow):
 
         self.locale = Localization()
 
-        spacer = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
+        spacer = QtWidgets.QSpacerItem(40, 20,
+                                       QtWidgets.QSizePolicy.Expanding,
+                                       QtWidgets.QSizePolicy.Minimum)
 
         self.bytes_field = QtWidgets.QTextEdit(self.central_widget)
         self.bytes_field.setFont(font)
         self.bytes_field.setMinimumWidth(char_width * 16 * 3 + thickening)
-        self.bytes_field.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        self.bytes_field.setVerticalScrollBarPolicy(
+            QtCore.Qt.ScrollBarAlwaysOff)
         self.bytes_field.setReadOnly(True)
         self.bytes_field.keyPressEvent = self.hex_key_event
         self.bytes_field.wheelEvent = lambda _: None
@@ -43,13 +59,15 @@ class UiMainWindow(QtWidgets.QMainWindow):
         self.count_tens = QtWidgets.QTextEdit(self.central_widget)
         self.count_tens.setFixedWidth(char_width * 9 + thickening)
         self.count_tens.setFont(font)
-        self.count_tens.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        self.count_tens.setVerticalScrollBarPolicy(
+            QtCore.Qt.ScrollBarAlwaysOff)
         self.count_tens.setDisabled(True)
 
         self.bytes_decryption_field = QtWidgets.QTextEdit(self.central_widget)
         self.bytes_decryption_field.setFixedWidth(char_width * 17 + thickening)
         self.bytes_decryption_field.setFont(font)
-        self.bytes_decryption_field.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        self.bytes_decryption_field.setVerticalScrollBarPolicy(
+            QtCore.Qt.ScrollBarAlwaysOff)
         self.bytes_decryption_field.setWordWrapMode(QtGui.QTextOption.NoWrap)
         self.bytes_decryption_field.setReadOnly(True)
         self.bytes_decryption_field.keyPressEvent = self.text_key_event
@@ -62,7 +80,7 @@ class UiMainWindow(QtWidgets.QMainWindow):
         self.count_units.setDisabled(True)
 
         self.lable = QtWidgets.QLabel()
-        self.lable.setFont(QtGui.QFont("PT Mono", 12, QtGui.QFont.Bold))
+        self.lable.setFont(font)
         font.setBold(True)
         self.lable.setFont(font)
 
@@ -133,7 +151,11 @@ class UiMainWindow(QtWidgets.QMainWindow):
         self.language_action_en.triggered.connect(lambda: self.change_language('english'))
         self.language_action_ru.triggered.connect(lambda: self.change_language('russian'))
 
-    def set_titles(self):
+    def set_titles(self) -> None:
+        """
+        Установка заголовков.
+
+        """
         self.setWindowTitle(self.locale.localize('title'))
         self.file_menu.setTitle(self.locale.localize('file'))
         self.open_action.setText(self.locale.localize('open'))
@@ -145,11 +167,25 @@ class UiMainWindow(QtWidgets.QMainWindow):
         self.language_menu.setTitle(self.locale.localize('language'))
         self.lable.setText(self.locale.localize('offset'))
 
-    def change_language(self, language_code):
+    def change_language(self, language_code: str) -> None:
+        """
+        Изменение языка интерфейса.
+
+        :param language_code: Код языка.
+        :type language_code: str
+
+        """
         self.locale.set_language(language_code)
         self.set_titles()
 
-    def hex_key_event(self, event):
+    def hex_key_event(self, event: QtGui.QKeyEvent) -> None:
+        """
+        Обработчик событий для поля шестнадцатеричных данных.
+
+        :param event: Событие клавиатуры.
+        :type event: QtGui.QKeyEvent
+
+        """
         cursor = self.bytes_field.textCursor()
         if event.key() == QtCore.Qt.Key_Left:
             cursor_correcting_for_hex(cursor)
@@ -169,7 +205,14 @@ class UiMainWindow(QtWidgets.QMainWindow):
             self.hex_field_key_pres.emit(cursor, event.text())
         self.bytes_field.setTextCursor(cursor)
 
-    def text_key_event(self, event):
+    def text_key_event(self, event: QtGui.QKeyEvent) -> None:
+        """
+        Обработчик событий для поля текстовых данных.
+
+        :param event: Событие клавиатуры.
+        :type event: QtGui.QKeyEvent
+
+        """
         cursor = self.bytes_decryption_field.textCursor()
         if event.key() == QtCore.Qt.Key_Left:
             cursor.movePosition(cursor.Left, cursor.MoveAnchor, 1)
@@ -187,13 +230,22 @@ class UiMainWindow(QtWidgets.QMainWindow):
             self.text_field_key_pres.emit(cursor, event.text())
         self.bytes_decryption_field.setTextCursor(cursor)
 
-    def closeEvent(self, event):
+    def closeEvent(self, event: QtGui.QCloseEvent) -> None:
+        """
+        Обработчик события закрытия окна.
+
+        :param event: Событие закрытия окна.
+        :type event: QtGui.QCloseEvent
+
+        """
         title = self.locale.localize('confirm_exit_title')
         message = self.locale.localize('confirm_exit_message')
         yes = self.locale.localize('yes')
         no = self.locale.localize('no')
 
-        dialog = CustomDialog(self, title, message, [(yes, QDialog.Accepted), (no, QDialog.Rejected)])
+        dialog = CustomDialog(self, title, message,
+                              [(yes, QDialog.Accepted),
+                               (no, QDialog.Rejected)])
         result = dialog.exec_()
 
         if result == QDialog.Accepted:
